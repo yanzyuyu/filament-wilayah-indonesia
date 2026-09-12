@@ -2,16 +2,14 @@
 
 namespace Yanzyuyu\FilamentWilayah\Forms\Components;
 
+use Filament\Forms\Components\Component;
+use Filament\Forms\Components\Fieldset;
 use Filament\Forms\Components\Group;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
-use Yanzyuyu\FilamentWilayah\Models\City;
-use Yanzyuyu\FilamentWilayah\Models\District;
-use Yanzyuyu\FilamentWilayah\Models\Province;
-use Yanzyuyu\FilamentWilayah\Models\Village;
+use Yanzyuyu\FilamentWilayah\Services\WilayahDataService;
 
 class WilayahIndonesia extends Group
 {
@@ -38,6 +36,14 @@ class WilayahIndonesia extends Group
     protected bool $isSearchable = true;
 
     protected bool $isPreloaded = false;
+
+    protected string $templateType = 'grid';
+
+    protected ?string $sectionHeading = null;
+
+    protected ?string $sectionDescription = null;
+
+    protected bool $sectionCollapsible = false;
 
     public static function make(): static
     {
@@ -120,19 +126,70 @@ class WilayahIndonesia extends Group
         return $this;
     }
 
+    public function asSection(
+        string $heading = 'Wilayah Administratif',
+        ?string $description = 'Pilih lokasi bertingkat dari provinsi hingga kelurahan/desa',
+        bool $collapsible = false
+    ): static {
+        $this->templateType = 'section';
+        $this->sectionHeading = $heading;
+        $this->sectionDescription = $description;
+        $this->sectionCollapsible = $collapsible;
+        return $this;
+    }
+
+    public function asFieldset(string $label = 'Wilayah Administratif'): static
+    {
+        $this->templateType = 'fieldset';
+        $this->sectionHeading = $label;
+        return $this;
+    }
+
+    public function asCompact(): static
+    {
+        $this->templateType = 'compact';
+        $this->columns(4);
+        return $this;
+    }
+
+    public function asInline(): static
+    {
+        $this->templateType = 'inline';
+        $this->columns(1);
+        return $this;
+    }
+
     public function getChildComponents(): array
     {
-        $components = [
+        $selects = [
             $this->buildProvinceSelect(),
             $this->buildCitySelect(),
             $this->buildDistrictSelect(),
         ];
 
         if ($this->hasVillage) {
-            $components[] = $this->buildVillageSelect();
+            $selects[] = $this->buildVillageSelect();
         }
 
-        return $components;
+        if ($this->templateType === 'section') {
+            $section = Section::make($this->sectionHeading ?? 'Wilayah Administratif')
+                ->description($this->sectionDescription)
+                ->collapsible($this->sectionCollapsible)
+                ->schema($selects)
+                ->columns($this->getColumns() ?? 2);
+
+            return [$section];
+        }
+
+        if ($this->templateType === 'fieldset') {
+            $fieldset = Fieldset::make($this->sectionHeading ?? 'Wilayah Administratif')
+                ->schema($selects)
+                ->columns($this->getColumns() ?? 2);
+
+            return [$fieldset];
+        }
+
+        return $selects;
     }
 
     protected function buildProvinceSelect(): Select
@@ -143,7 +200,9 @@ class WilayahIndonesia extends Group
 
         return Select::make($this->provinceField)
             ->label($this->provinceLabel)
-            ->options(fn () => $this->getProvinces())
+            ->prefixIcon('heroicon-m-map-pin')
+            ->placeholder('-- Pilih Provinsi --')
+            ->options(fn () => app(WilayahDataService::class)->getProvinces())
             ->searchable($this->isSearchable)
             ->preload($this->isPreloaded)
             ->required($this->isRequired)
@@ -163,7 +222,12 @@ class WilayahIndonesia extends Group
 
         return Select::make($this->cityField)
             ->label($this->cityLabel)
-            ->options(fn (Get $get) => $this->getCities((string) $get($provinceField)))
+            ->prefixIcon('heroicon-m-building-office-2')
+            ->placeholder(fn (Get $get): string => blank($get($provinceField))
+                ? 'Pilih provinsi terlebih dahulu'
+                : '-- Pilih Kab/Kota --'
+            )
+            ->options(fn (Get $get) => app(WilayahDataService::class)->getCities((string) $get($provinceField)))
             ->searchable($this->isSearchable)
             ->preload($this->isPreloaded)
             ->required($this->isRequired)
@@ -182,7 +246,12 @@ class WilayahIndonesia extends Group
 
         return Select::make($this->districtField)
             ->label($this->districtLabel)
-            ->options(fn (Get $get) => $this->getDistricts((string) $get($cityField)))
+            ->prefixIcon('heroicon-m-home-modern')
+            ->placeholder(fn (Get $get): string => blank($get($cityField))
+                ? 'Pilih kab/kota terlebih dahulu'
+                : '-- Pilih Kecamatan --'
+            )
+            ->options(fn (Get $get) => app(WilayahDataService::class)->getDistricts((string) $get($cityField)))
             ->searchable($this->isSearchable)
             ->preload($this->isPreloaded)
             ->required($this->isRequired)
@@ -199,96 +268,15 @@ class WilayahIndonesia extends Group
 
         return Select::make($this->villageField)
             ->label($this->villageLabel)
-            ->options(fn (Get $get) => $this->getVillages((string) $get($districtField)))
+            ->prefixIcon('heroicon-m-home')
+            ->placeholder(fn (Get $get): string => blank($get($districtField))
+                ? 'Pilih kecamatan terlebih dahulu'
+                : '-- Pilih Kelurahan/Desa --'
+            )
+            ->options(fn (Get $get) => app(WilayahDataService::class)->getVillages((string) $get($districtField)))
             ->searchable($this->isSearchable)
             ->preload($this->isPreloaded)
             ->required($this->isRequired)
             ->disabled(fn (Get $get): bool => blank($get($districtField)));
-    }
-
-    protected function getProvinces(): Collection
-    {
-        $cacheEnabled = (bool) config('filament-wilayah.cache.enabled', true);
-        $ttl = (int) config('filament-wilayah.cache.ttl_seconds', 86400);
-
-        if (!$cacheEnabled) {
-            return Province::query()->orderBy('name')->pluck('name', 'code');
-        }
-
-        return Cache::remember('wilayah_provinces', $ttl, function () {
-            return Province::query()->orderBy('name')->pluck('name', 'code');
-        });
-    }
-
-    protected function getCities(string $provinceCode): Collection
-    {
-        if (blank($provinceCode)) {
-            return collect();
-        }
-
-        $cacheEnabled = (bool) config('filament-wilayah.cache.enabled', true);
-        $ttl = (int) config('filament-wilayah.cache.ttl_seconds', 86400);
-
-        if (!$cacheEnabled) {
-            return City::query()
-                ->where('province_code', $provinceCode)
-                ->orderBy('name')
-                ->pluck('name', 'code');
-        }
-
-        return Cache::remember("wilayah_cities_{$provinceCode}", $ttl, function () use ($provinceCode) {
-            return City::query()
-                ->where('province_code', $provinceCode)
-                ->orderBy('name')
-                ->pluck('name', 'code');
-        });
-    }
-
-    protected function getDistricts(string $cityCode): Collection
-    {
-        if (blank($cityCode)) {
-            return collect();
-        }
-
-        $cacheEnabled = (bool) config('filament-wilayah.cache.enabled', true);
-        $ttl = (int) config('filament-wilayah.cache.ttl_seconds', 86400);
-
-        if (!$cacheEnabled) {
-            return District::query()
-                ->where('city_code', $cityCode)
-                ->orderBy('name')
-                ->pluck('name', 'code');
-        }
-
-        return Cache::remember("wilayah_districts_{$cityCode}", $ttl, function () use ($cityCode) {
-            return District::query()
-                ->where('city_code', $cityCode)
-                ->orderBy('name')
-                ->pluck('name', 'code');
-        });
-    }
-
-    protected function getVillages(string $districtCode): Collection
-    {
-        if (blank($districtCode)) {
-            return collect();
-        }
-
-        $cacheEnabled = (bool) config('filament-wilayah.cache.enabled', true);
-        $ttl = (int) config('filament-wilayah.cache.ttl_seconds', 86400);
-
-        if (!$cacheEnabled) {
-            return Village::query()
-                ->where('district_code', $districtCode)
-                ->orderBy('name')
-                ->pluck('name', 'code');
-        }
-
-        return Cache::remember("wilayah_villages_{$districtCode}", $ttl, function () use ($districtCode) {
-            return Village::query()
-                ->where('district_code', $districtCode)
-                ->orderBy('name')
-                ->pluck('name', 'code');
-        });
     }
 }
