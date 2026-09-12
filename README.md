@@ -140,6 +140,13 @@ filament-wilayah-indonesia/
 │   │   └── villages.json
 │   └── migrations/
 │       └── create_wilayah_indonesia_tables.php.stub
+├── demo/
+│   └── index.php
+├── examples/
+│   ├── Filament/Resources/CustomerResource.php
+│   ├── Models/Customer.php
+│   ├── migrations/create_customers_table.php
+│   └── README.md
 ├── src/
 │   ├── Commands/
 │   │   └── InstallWilayahCommand.php
@@ -151,6 +158,8 @@ filament-wilayah-indonesia/
 │   │   ├── District.php
 │   │   ├── Province.php
 │   │   └── Village.php
+│   ├── Services/
+│   │   └── WilayahDataService.php
 │   └── FilamentWilayahServiceProvider.php
 ├── composer.json
 ├── LICENSE
