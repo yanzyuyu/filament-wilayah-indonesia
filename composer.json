@@ -1,0 +1,48 @@
+{
+  "name": "yanzyuyu/filament-wilayah-indonesia",
+  "description": "Cascading dropdown selector for Indonesian administrative regions in Filament v3.",
+  "type": "library",
+  "keywords": [
+    "laravel",
+    "filament",
+    "filament-plugin",
+    "indonesia",
+    "wilayah",
+    "cascading-dropdown",
+    "provinsi",
+    "kabupaten",
+    "kecamatan",
+    "kelurahan"
+  ],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "yanzyuyu",
+      "homepage": "https://github.com/yanzyuyu"
+    }
+  ],
+  "require": {
+    "php": "^8.2",
+    "illuminate/database": "^10.0|^11.0",
+    "illuminate/support": "^10.0|^11.0",
+    "filament/forms": "^3.0"
+  },
+  "require-dev": {
+    "orchestra/testbench": "^8.0|^9.0",
+    "pestphp/pest": "^2.0|^3.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Yanzyuyu\\FilamentWilayah\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Yanzyuyu\\FilamentWilayah\\FilamentWilayahServiceProvider"
+      ]
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
