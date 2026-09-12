@@ -1,0 +1,66 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $tableProvinces = config('filament-wilayah.tables.provinces', 'wilayah_provinces');
+        $tableCities = config('filament-wilayah.tables.cities', 'wilayah_cities');
+        $tableDistricts = config('filament-wilayah.tables.districts', 'wilayah_districts');
+        $tableVillages = config('filament-wilayah.tables.villages', 'wilayah_villages');
+
+        Schema::create($tableProvinces, function (Blueprint $table) {
+            $table->string('code', 10)->primary();
+            $table->string('name');
+            $table->timestamps();
+        });
+
+        Schema::create($tableCities, function (Blueprint $table) use ($tableProvinces) {
+            $table->string('code', 10)->primary();
+            $table->string('province_code', 10)->index();
+            $table->string('name');
+            $table->timestamps();
+
+            $table->foreign('province_code')
+                ->references('code')
+                ->on($tableProvinces)
+                ->cascadeOnDelete();
+        });
+
+        Schema::create($tableDistricts, function (Blueprint $table) use ($tableCities) {
+            $table->string('code', 10)->primary();
+            $table->string('city_code', 10)->index();
+            $table->string('name');
+            $table->timestamps();
+
+            $table->foreign('city_code')
+                ->references('code')
+                ->on($tableCities)
+                ->cascadeOnDelete();
+        });
+
+        Schema::create($tableVillages, function (Blueprint $table) use ($tableDistricts) {
+            $table->string('code', 15)->primary();
+            $table->string('district_code', 10)->index();
+            $table->string('name');
+            $table->timestamps();
+
+            $table->foreign('district_code')
+                ->references('code')
+                ->on($tableDistricts)
+                ->cascadeOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists(config('filament-wilayah.tables.villages', 'wilayah_villages'));
+        Schema::dropIfExists(config('filament-wilayah.tables.districts', 'wilayah_districts'));
+        Schema::dropIfExists(config('filament-wilayah.tables.cities', 'wilayah_cities'));
+        Schema::dropIfExists(config('filament-wilayah.tables.provinces', 'wilayah_provinces'));
+    }
+};
