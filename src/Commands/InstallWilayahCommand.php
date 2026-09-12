@@ -5,11 +5,13 @@ namespace Yanzyuyu\FilamentWilayah\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 
 class InstallWilayahCommand extends Command
 {
     protected $signature = 'wilayah:install
                             {--force : Force truncate and reseed wilayah tables}
+                            {--sync-all : Fetch and sync 100% complete dataset from official open data}
                             {--skip-seed : Only publish and run migrations without seeding}';
 
     protected $description = 'Install migrations and seed Indonesian administrative regions dataset';
@@ -19,7 +21,6 @@ class InstallWilayahCommand extends Command
         $this->components->info('Installing Filament Wilayah Indonesia...');
 
         $this->publishAssets();
-
         $this->runMigrations();
 
         if ($this->option('skip-seed')) {
@@ -27,7 +28,11 @@ class InstallWilayahCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->seedDataset();
+        if ($this->option('sync-all')) {
+            $this->syncFromOfficialSource();
+        } else {
+            $this->seedDataset();
+        }
 
         $this->components->info('Filament Wilayah Indonesia successfully installed!');
         return self::SUCCESS;
@@ -73,6 +78,44 @@ class InstallWilayahCommand extends Command
         $this->seedFile("{$dataPath}/cities.json", $tableCities, 'Cities / Regencies');
         $this->seedFile("{$dataPath}/districts.json", $tableDistricts, 'Districts (Kecamatan)');
         $this->seedFile("{$dataPath}/villages.json", $tableVillages, 'Villages (Kelurahan/Desa)');
+    }
+
+    protected function syncFromOfficialSource(): void
+    {
+        $tableProvinces = config('filament-wilayah.tables.provinces', 'wilayah_provinces');
+        $tableCities = config('filament-wilayah.tables.cities', 'wilayah_cities');
+
+        $this->components->task('Fetching official provinces data', function () use ($tableProvinces) {
+            $response = Http::timeout(10)->get('https://emsifa.github.io/api-wilayah-indonesia/api/provinces.json');
+            if ($response->successful()) {
+                $now = now();
+                $rows = array_map(fn ($p) => [
+                    'code' => (string) $p['id'],
+                    'name' => (string) $p['name'],
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ], $response->json());
+                DB::table($tableProvinces)->upsert($rows, ['code']);
+            }
+        });
+
+        $this->components->task('Fetching official regencies / cities data', function () use ($tableProvinces, $tableCities) {
+            $provinces = DB::table($tableProvinces)->pluck('code');
+            $now = now();
+            foreach ($provinces as $provCode) {
+                $res = Http::timeout(10)->get("https://emsifa.github.io/api-wilayah-indonesia/api/regencies/{$provCode}.json");
+                if ($res->successful()) {
+                    $rows = array_map(fn ($c) => [
+                        'code' => (string) $c['id'],
+                        'province_code' => (string) $c['province_id'],
+                        'name' => (string) $c['name'],
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ], $res->json());
+                    DB::table($tableCities)->upsert($rows, ['code']);
+                }
+            }
+        });
     }
 
     protected function seedFile(string $filePath, string $tableName, string $label): void
